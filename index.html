@@ -1,0 +1,679 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>KCYM Ice Cream Sales</title>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+    <!-- PDF Generation Libraries -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.29/jspdf.plugin.autotable.min.js"></script>
+
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+
+    <style>
+        :root {
+            --app-bg: #F8F9FE;
+            --card-bg: #FFFFFF;
+            --text-main: #1F2937;
+            --text-sub: #9CA3AF;
+            --accent-green: #10B981;
+            --accent-red: #EF4444;
+        }
+        
+        body { 
+            font-family: 'Poppins', sans-serif; 
+            touch-action: manipulation; 
+            background-color: var(--app-bg);
+            color: var(--text-main);
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        /* Soft UI Shadows */
+        .shadow-soft {
+            box-shadow: 0 10px 40px -10px rgba(0,0,0,0.05);
+        }
+        .shadow-button {
+            box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+        }
+
+        /* Animations */
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        .animate-fade-in { animation: fadeIn 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+        
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        .spinner {
+            border: 3px solid rgba(0, 0, 0, 0.1);
+            width: 20px; height: 20px; border-radius: 50%;
+            border-left-color: #374151;
+            animation: spin 0.8s linear infinite;
+        }
+
+        /* Elements */
+        .btn-soft {
+            transition: all 0.2s ease;
+        }
+        .btn-soft:active {
+            transform: scale(0.95);
+        }
+
+        /* Input Clean Up */
+        input[type=number]::-webkit-inner-spin-button, 
+        input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+        
+        /* Scrollbar */
+        .hide-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+        .hide-scrollbar {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+    </style>
+</head>
+<body class="pb-24">
+
+    <!-- ================= MODALS ================= -->
+
+    <!-- Loading Overlay -->
+    <div id="loading-overlay" class="fixed inset-0 z-50 bg-[#F8F9FE] flex flex-col items-center justify-center transition-opacity duration-500">
+        <div class="w-16 h-16 bg-white rounded-3xl shadow-soft flex items-center justify-center mb-6">
+            <i class="fas fa-ice-cream text-red-500 text-2xl animate-bounce"></i>
+        </div>
+        <h2 class="text-xl font-bold tracking-tight text-gray-800">KCYM Tracker</h2>
+        <p class="text-xs text-gray-400 mt-2 font-medium">Syncing...</p>
+    </div>
+
+    <!-- Custom Alert/Confirm Modal -->
+    <div id="custom-modal" class="fixed inset-0 z-[60] bg-gray-900/40 hidden flex items-center justify-center p-6 backdrop-blur-sm transition-opacity duration-200">
+        <div class="bg-white rounded-[2rem] shadow-2xl w-full max-w-sm p-8 transform transition-all scale-100" id="modal-content">
+            <div id="modal-icon" class="text-4xl mb-4 text-center"></div>
+            <h3 id="modal-title" class="text-lg font-bold text-center mb-2 text-gray-800"></h3>
+            <p id="modal-message" class="text-gray-500 text-center mb-8 text-sm leading-relaxed"></p>
+            <div id="modal-actions" class="flex gap-3 justify-center"></div>
+        </div>
+    </div>
+
+    <!-- PIN Entry Modal -->
+    <div id="pin-modal" class="fixed inset-0 z-[55] bg-white/95 hidden flex items-center justify-center p-6 backdrop-blur-xl">
+        <div class="w-full max-w-xs text-center">
+            <div class="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-6 text-gray-400">
+                <i class="fas fa-lock"></i>
+            </div>
+            <h3 class="text-2xl font-bold text-gray-800 mb-2">Admin Access</h3>
+            <p class="text-sm text-gray-400 mb-8">Enter security PIN to continue</p>
+            
+            <input type="password" id="pin-input" class="w-full bg-gray-50 border-none rounded-2xl p-5 text-center text-3xl font-bold tracking-[0.5em] mb-6 focus:ring-0 text-gray-800 placeholder-gray-200 shadow-inner outline-none" placeholder="••••">
+            
+            <div class="grid grid-cols-2 gap-4">
+                <button onclick="closePinModal()" class="py-4 rounded-2xl font-bold text-gray-500 bg-gray-50 hover:bg-gray-100 transition">Cancel</button>
+                <button onclick="verifyPin()" class="py-4 rounded-2xl font-bold text-white bg-gray-900 hover:bg-black transition shadow-lg">Unlock</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ================= VIEWS ================= -->
+
+    <!-- VIEW 1: MAIN SALES TRACKER -->
+    <div id="main-view" class="block animate-fade-in max-w-md mx-auto min-h-screen relative">
+        
+        <!-- Header -->
+        <header class="pt-8 pb-2 px-6 flex justify-between items-center bg-[#F8F9FE] sticky top-0 z-40">
+            <div>
+                <p class="text-xs font-bold text-gray-400 uppercase tracking-wider" id="current-date">Today</p>
+                <h1 class="text-2xl font-bold text-gray-800">Sales Tracker</h1>
+            </div>
+            <div class="flex items-center gap-3">
+                 <div id="sync-indicator" class="hidden w-8 h-8 rounded-full bg-white shadow-sm flex items-center justify-center">
+                    <i class="fas fa-sync fa-spin text-gray-400 text-xs"></i>
+                </div>
+                <button onclick="openPinModal()" class="w-10 h-10 rounded-full bg-white shadow-soft flex items-center justify-center text-gray-600 hover:text-gray-900 transition">
+                    <i class="far fa-user"></i>
+                </button>
+            </div>
+        </header>
+
+        <!-- Stats Section (Like "Daily Activity") -->
+        <section class="px-6 py-4">
+            <div class="flex gap-4">
+                <!-- Revenue Card -->
+                <div class="flex-1 bg-white p-5 rounded-[2rem] shadow-soft flex flex-col justify-center items-center text-center relative overflow-hidden">
+                    <div class="absolute top-0 right-0 w-16 h-16 bg-green-50 rounded-bl-[2rem]"></div>
+                    <p class="text-xs font-semibold text-gray-400 mb-1 relative z-10">Revenue</p>
+                    <h2 class="text-2xl font-bold text-gray-800 relative z-10">₹<span id="live-revenue">0</span></h2>
+                </div>
+                
+                <!-- Count Card -->
+                <div class="flex-1 bg-white p-5 rounded-[2rem] shadow-soft flex flex-col justify-center items-center text-center relative overflow-hidden">
+                    <div class="absolute top-0 right-0 w-16 h-16 bg-red-50 rounded-bl-[2rem]"></div>
+                    <p class="text-xs font-semibold text-gray-400 mb-1 relative z-10">Sold</p>
+                    <h2 class="text-2xl font-bold text-gray-800 relative z-10" id="live-items">0</h2>
+                </div>
+            </div>
+        </section>
+
+        <!-- Menu Section -->
+        <section class="px-6 pb-24">
+            <div class="flex justify-between items-center mb-4 mt-2">
+                <h3 class="text-lg font-bold text-gray-800">Menu Items</h3>
+                <span class="w-2 h-2 rounded-full bg-green-400 shadow-[0_0_10px_rgba(74,222,128,0.5)]"></span>
+            </div>
+
+            <!-- Items List -->
+            <div id="items-list" class="space-y-4">
+                <!-- Items injected by JS -->
+            </div>
+        </section>
+
+        <!-- Bottom Navigation Bar -->
+        <div class="fixed bottom-0  left-0 right-0 bg-white border-t border-gray-50 px-8 py-4 flex justify-between items-center rounded-t-[2rem] shadow-[0_-10px_40px_-15px_rgba(0,0,0,0.1)] z-40 max-w-md mx-auto">
+             <div class="flex flex-col items-center gap-1 text-gray-800">
+                <i class="fas fa-home text-lg"></i>
+                <span class="text-[10px] font-medium">Home</span>
+            </div>
+            
+            <!-- Undo Floating Action Button in Center -->
+             <button onclick="attemptGlobalUndo()" class="mb-8 w-16 h-16 rounded-full bg-gray-900 text-white shadow-xl shadow-gray-300 flex items-center justify-center transform transition active:scale-95 hover:scale-105">
+                <i class="fas fa-undo"></i>
+            </button>
+
+             <div onclick="openPinModal()" class="flex flex-col items-center gap-1 text-gray-300 cursor-pointer hover:text-gray-500 transition">
+                <i class="fas fa-chart-pie text-lg"></i>
+                <span class="text-[10px] font-medium">Admin</span>
+            </div>
+        </div>
+    </div>
+
+
+    <!-- VIEW 2: ADMIN DASHBOARD (Styled Soft UI) -->
+    <div id="admin-view" class="hidden bg-[#F8F9FE] min-h-screen pb-10 max-w-md mx-auto">
+        
+        <header class="pt-8 pb-6 px-6 bg-white rounded-b-[2rem] shadow-soft mb-6 sticky top-0 z-40">
+            <div class="flex justify-between items-center">
+                <h1 class="text-xl font-bold text-gray-800">Dashboard</h1>
+                <button onclick="exitAdmin()" class="w-8 h-8 rounded-full bg-gray-50 flex items-center justify-center text-gray-400 hover:bg-gray-100 hover:text-gray-600 transition">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+        </header>
+
+        <main class="px-6 space-y-6">
+            <!-- Stats -->
+            <div class="bg-white p-6 rounded-[2rem] shadow-soft">
+                <div class="flex justify-between items-end mb-2">
+                    <div>
+                         <p class="text-xs font-semibold text-gray-400 uppercase">Total Revenue</p>
+                        <h2 class="text-3xl font-bold text-gray-800 mt-1">₹<span id="admin-revenue">0</span></h2>
+                    </div>
+                    <div class="text-right">
+                         <p class="text-xs font-semibold text-gray-400 uppercase">Count</p>
+                        <h2 class="text-2xl font-bold text-gray-800 mt-1" id="admin-items">0</h2>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Breakdown -->
+            <div>
+                <h3 class="font-bold text-gray-800 mb-3 px-2">Breakdown</h3>
+                <div id="admin-breakdown" class="space-y-3"></div>
+            </div>
+
+            <!-- Actions -->
+            <div class="grid grid-cols-2 gap-3">
+                 <button onclick="generatePDF()" class="p-4 bg-blue-50 text-blue-600 rounded-3xl font-bold text-sm hover:bg-blue-100 transition flex flex-col items-center gap-2">
+                    <i class="fas fa-file-pdf text-xl"></i>
+                    Report
+                </button>
+                 <button onclick="restoreLastReset()" class="p-4 bg-purple-50 text-purple-600 rounded-3xl font-bold text-sm hover:bg-purple-100 transition flex flex-col items-center gap-2">
+                    <i class="fas fa-history text-xl"></i>
+                    Restore
+                </button>
+            </div>
+            
+            <button onclick="confirmResetAll()" class="w-full p-4 bg-white text-red-500 border border-red-50 rounded-3xl font-bold text-sm hover:bg-red-50 transition shadow-soft flex items-center justify-center gap-2">
+                <i class="fas fa-trash-alt"></i> Reset All Data
+            </button>
+
+            <!-- Logs -->
+            <div class="bg-white rounded-[2rem] p-6 shadow-soft">
+                <h3 class="font-bold text-gray-800 mb-4 text-sm">Recent Activity</h3>
+                <div id="logs-table-body" class="space-y-4 max-h-60 overflow-y-auto hide-scrollbar">
+                    <!-- Logs injected -->
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Firebase SDKs -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getFirestore, doc, onSnapshot, setDoc, updateDoc, increment, serverTimestamp, collection, addDoc, query, orderBy, limit, runTransaction, getDoc, deleteDoc, getDocs } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // --- CONFIG ---
+        const firebaseConfig = {
+            apiKey: "AIzaSyB_iw6XWHz4Q8DuCd4nUAD7yjHaCmQtXgg",
+            authDomain: "kcym-fc92e.firebaseapp.com",
+            projectId: "kcym-fc92e",
+            storageBucket: "kcym-fc92e.firebasestorage.app",
+            messagingSenderId: "16631311673",
+            appId: "1:16631311673:web:59ea3efcf399a90c50cce8"
+        };
+
+        const ITEMS_CONFIG = [
+            { id: 'chocobar', name: 'Chocobar', price: 35, icon: '🍫', bg: 'bg-amber-100', text: 'text-amber-600' },
+            { id: 'mangobar', name: 'Mangobar', price: 35, icon: '🥭', bg: 'bg-orange-100', text: 'text-orange-600' },
+            { id: 'cone', name: 'Cone', price: 50, icon: '🍦', bg: 'bg-pink-100', text: 'text-pink-600' }
+        ];
+
+        // --- INIT ---
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+        const todayStr = new Date().toISOString().split('T')[0];
+        const salesRef = doc(db, "icecream_sales", todayStr);
+        const logsRef = collection(db, "icecream_logs");
+
+        let currentSalesData = {};
+
+        // --- UI GENERATION ---
+        function initUI() {
+            document.getElementById('current-date').innerText = new Date().toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'short' });
+            
+            const container = document.getElementById('items-list');
+            container.innerHTML = '';
+            
+            ITEMS_CONFIG.forEach(item => {
+                const html = `
+                <div class="bg-white rounded-[2rem] p-5 shadow-soft animate-fade-in relative overflow-hidden group">
+                    <!-- Top Row: Icon + Info + Current Count -->
+                    <div class="flex items-start justify-between mb-5">
+                        <div class="flex items-center gap-4">
+                            <div class="w-16 h-16 rounded-2xl ${item.bg} flex items-center justify-center text-3xl ${item.text}">
+                                ${item.icon}
+                            </div>
+                            <div>
+                                <h3 class="font-bold text-gray-800 text-lg leading-tight">${item.name}</h3>
+                                <p class="text-sm font-medium text-gray-400 mt-1">₹${item.price} <span class="text-gray-300 text-xs font-normal">/ unit</span></p>
+                            </div>
+                        </div>
+                        <div class="text-right bg-gray-900 px-4 py-3 rounded-2xl shadow-inner">
+                            <span id="count-${item.id}" class="text-2xl font-bold text-white block leading-none">0</span>
+                            <span class="text-[10px] font-bold text-gray-400 uppercase tracking-wider">SOLD</span>
+                        </div>
+                    </div>
+
+                    <!-- Action Grid (Clean soft buttons) -->
+                    <div class="grid grid-cols-5 gap-2 mb-4">
+                        ${[1,2,3,4,5].map(n => `
+                            <button onclick="processSale('${item.id}', ${n}, this)" class="btn-soft h-10 rounded-xl bg-gray-50 text-gray-600 font-bold hover:bg-gray-900 hover:text-white transition-colors text-sm flex items-center justify-center">
+                                +${n}
+                            </button>
+                        `).join('')}
+                    </div>
+
+                    <!-- Bottom Controls: Undo / Custom -->
+                    <div class="flex items-center gap-3">
+                         <button onclick="processSale('${item.id}', -1, this)" class="btn-soft w-10 h-10 flex items-center justify-center rounded-xl border border-gray-100 text-gray-400 hover:text-red-500 hover:border-red-200 transition">
+                            <i class="fas fa-minus text-xs"></i>
+                        </button>
+                        
+                        <div class="flex-1 relative">
+                            <input type="number" id="input-${item.id}" placeholder="Qty" class="w-full h-10 bg-gray-50 rounded-xl pl-4 pr-16 text-sm font-bold text-gray-700 outline-none focus:ring-1 focus:ring-gray-200 transition">
+                            <button onclick="processCustomAdd('${item.id}', this)" class="absolute right-1 top-1 bottom-1 px-4 bg-white rounded-lg text-xs font-bold text-gray-800 shadow-sm hover:bg-gray-100 transition">ADD</button>
+                        </div>
+                    </div>
+                </div>`;
+                container.innerHTML += html;
+            });
+        }
+
+        // --- FIREBASE LOGIC ---
+        onSnapshot(salesRef, (snap) => {
+            const loader = document.getElementById('loading-overlay');
+            if(loader) {
+                loader.style.opacity = '0';
+                setTimeout(() => loader.remove(), 500);
+            }
+
+            if (snap.exists()) {
+                currentSalesData = snap.data();
+                updateMainUI(currentSalesData);
+                updateAdminUI(currentSalesData);
+            } else {
+                initDailyDoc();
+            }
+        }, (err) => {
+            console.error("Sync Error", err);
+        });
+
+        const logsQuery = query(logsRef, orderBy('timestamp', 'desc'), limit(20));
+        onSnapshot(logsQuery, (snap) => {
+            const tbody = document.getElementById('logs-table-body');
+            tbody.innerHTML = ''; 
+            
+            if (snap.empty) {
+                tbody.innerHTML = '<p class="text-center text-gray-300 text-xs py-4">No activity yet.</p>';
+            } else {
+                snap.forEach(doc => {
+                    const log = doc.data();
+                    const time = log.timestamp ? new Date(log.timestamp.toDate()).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : '...';
+                    
+                    let icon = log.type === 'SALE' && log.qty > 0 ? '<div class="w-8 h-8 rounded-full bg-green-50 flex items-center justify-center text-green-500"><i class="fas fa-plus text-xs"></i></div>' : 
+                               (log.type === 'SALE' ? '<div class="w-8 h-8 rounded-full bg-orange-50 flex items-center justify-center text-orange-500"><i class="fas fa-minus text-xs"></i></div>' : 
+                               '<div class="w-8 h-8 rounded-full bg-red-50 flex items-center justify-center text-red-500"><i class="fas fa-exclamation text-xs"></i></div>');
+
+                    let desc = log.type === 'RESET' ? 'System Reset' : `<span class="font-bold text-gray-700">${log.item}</span>`;
+                    let qtyDisplay = log.type === 'RESET' ? '' : `<span class="font-bold ${log.qty > 0 ? 'text-green-600' : 'text-orange-500'}">${log.qty > 0 ? '+' : ''}${log.qty}</span>`;
+
+                    tbody.innerHTML += `
+                        <div class="flex items-center gap-3 p-3 bg-gray-50 rounded-2xl">
+                            ${icon}
+                            <div class="flex-1">
+                                <p class="text-xs text-gray-800">${desc}</p>
+                                <p class="text-[10px] text-gray-400">${time}</p>
+                            </div>
+                            <div class="text-sm">
+                                ${qtyDisplay}
+                            </div>
+                        </div>
+                    `;
+                });
+            }
+        });
+
+        async function initDailyDoc() {
+            try {
+                const initial = { lastUpdated: serverTimestamp() };
+                ITEMS_CONFIG.forEach(i => initial[i.id] = 0);
+                initial.totalRevenue = 0;
+                initial.totalItems = 0;
+                await setDoc(salesRef, initial);
+            } catch (e) { console.error(e); }
+        }
+
+        // --- CORE ACTIONS ---
+        window.processSale = async (itemId, qty, btnElement) => {
+            if(!itemId || qty === 0) return;
+            
+            // Validate: Prevent negative totals
+            const currentQty = currentSalesData[itemId] || 0;
+            if (qty < 0 && (currentQty + qty) < 0) {
+                showModal('Cannot Reduce', 'Stock count cannot go below zero.', 'error');
+                return;
+            }
+
+            let originalContent = '';
+            if(btnElement) {
+                originalContent = btnElement.innerHTML;
+                btnElement.disabled = true;
+                btnElement.innerHTML = '<div class="spinner mx-auto"></div>';
+                document.getElementById('sync-indicator').classList.remove('hidden');
+            }
+
+            if(navigator.vibrate) navigator.vibrate(10);
+
+            try {
+                const price = ITEMS_CONFIG.find(i => i.id === itemId).price;
+                const revenueChange = price * qty;
+                
+                const updatePromise = updateDoc(salesRef, {
+                    [itemId]: increment(qty),
+                    totalItems: increment(qty),
+                    totalRevenue: increment(revenueChange),
+                    lastUpdated: serverTimestamp()
+                });
+
+                const logPromise = addDoc(logsRef, {
+                     type: 'SALE',
+                     item: itemId,
+                     qty: qty,
+                     price: price,
+                     timestamp: serverTimestamp(),
+                     day: todayStr
+                });
+
+                await Promise.all([updatePromise, logPromise]);
+
+            } catch (e) {
+                console.error(e);
+                showModal('Sync Failed', 'Please check internet connection.', 'error');
+            } finally {
+                if(btnElement) {
+                    btnElement.disabled = false;
+                    btnElement.innerHTML = originalContent;
+                }
+                setTimeout(() => document.getElementById('sync-indicator').classList.add('hidden'), 500);
+            }
+        };
+
+        window.processCustomAdd = (itemId, btnElement) => {
+            const input = document.getElementById(`input-${itemId}`);
+            const qty = parseInt(input.value);
+            if(qty && !isNaN(qty)) {
+                processSale(itemId, qty, btnElement);
+                input.value = '';
+            }
+        };
+
+        window.attemptGlobalUndo = async () => {
+            showConfirm("Undo Last Action", "Revert the last sale?", async () => {
+                try {
+                    const snap = await getDocsWithLimit(logsRef, 1);
+                    if(snap.empty) {
+                        showModal("Info", "No actions to undo today.", "info");
+                        return;
+                    }
+
+                    const lastLog = snap.docs[0];
+                    const logData = lastLog.data();
+
+                    if(logData.type === 'RESET' || logData.day !== todayStr) {
+                         showModal("Restricted", "Cannot undo this action.", "error");
+                         return;
+                    }
+
+                    const price = ITEMS_CONFIG.find(i => i.id === logData.item).price;
+                    
+                    await updateDoc(salesRef, {
+                        [logData.item]: increment(-logData.qty),
+                        totalItems: increment(-logData.qty),
+                        totalRevenue: increment(-(logData.qty * price)),
+                        lastUpdated: serverTimestamp()
+                    });
+                    
+                    await deleteDoc(lastLog.ref);
+                    showModal("Undone", `Reverted: ${logData.item} (${logData.qty})`, "success");
+
+                } catch (e) {
+                    showModal("Error", "Undo failed: " + e.message, "error");
+                }
+            });
+        };
+        
+        async function getDocsWithLimit(ref, lim) {
+             const q = query(ref, orderBy('timestamp', 'desc'), limit(lim));
+             return await getDocs(q);
+        }
+
+        // --- UI UPDATERS ---
+        function updateMainUI(data) {
+            ITEMS_CONFIG.forEach(item => {
+                const el = document.getElementById(`count-${item.id}`);
+                if(el) {
+                    el.innerText = data[item.id] || 0;
+                }
+            });
+            document.getElementById('live-revenue').innerText = (data.totalRevenue || 0).toLocaleString('en-IN');
+            document.getElementById('live-items').innerText = data.totalItems || 0;
+        }
+
+        function updateAdminUI(data) {
+            document.getElementById('admin-revenue').innerText = (data.totalRevenue || 0).toLocaleString('en-IN');
+            document.getElementById('admin-items').innerText = data.totalItems || 0;
+
+            const breakdown = document.getElementById('admin-breakdown');
+            breakdown.innerHTML = '';
+            ITEMS_CONFIG.forEach(item => {
+                const qty = data[item.id] || 0;
+                const rev = qty * item.price;
+                breakdown.innerHTML += `
+                    <div class="flex justify-between items-center p-4 bg-white rounded-2xl shadow-soft">
+                        <div class="flex items-center gap-3">
+                            <span class="text-xl">${item.icon}</span>
+                            <span class="font-bold text-gray-700">${item.name}</span>
+                        </div>
+                        <div class="text-right">
+                            <span class="block font-bold text-gray-800">${qty}</span>
+                            <span class="text-xs font-bold text-gray-400">₹${rev}</span>
+                        </div>
+                    </div>
+                `;
+            });
+        }
+
+        // --- ADMIN FUNCTIONS ---
+        window.generatePDF = () => {
+            const { jsPDF } = window.jspdf;
+            const doc = new jsPDF();
+            
+            doc.setFillColor(31, 41, 55); 
+            doc.rect(0, 0, 210, 40, 'F');
+            doc.setTextColor(255, 255, 255);
+            doc.setFontSize(18);
+            doc.setFont('helvetica', 'bold');
+            doc.text("KCYM Sales Report", 105, 20, { align: 'center' });
+            
+            doc.setFontSize(10);
+            doc.setFont('helvetica', 'normal');
+            doc.text(`Date: ${new Date().toLocaleDateString('en-IN', {weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'})}`, 105, 30, { align: 'center' });
+
+            doc.setTextColor(0, 0, 0);
+            doc.setFontSize(14);
+            doc.text(`Revenue: Rs. ${(currentSalesData.totalRevenue || 0).toLocaleString('en-IN')}`, 14, 55);
+            doc.text(`Items Sold: ${currentSalesData.totalItems || 0}`, 14, 62);
+
+            const tableData = ITEMS_CONFIG.map(item => [item.name, item.price, currentSalesData[item.id] || 0, (currentSalesData[item.id] || 0) * item.price]);
+            tableData.push(['TOTAL', '-', currentSalesData.totalItems || 0, currentSalesData.totalRevenue || 0]);
+
+            doc.autoTable({
+                startY: 75,
+                head: [['Item', 'Price', 'Qty', 'Total']],
+                body: tableData,
+                theme: 'grid',
+                headStyles: { fillColor: [31, 41, 55], textColor: 255 },
+                styles: { fontSize: 10, cellPadding: 4 },
+                columnStyles: { 3: { halign: 'right' }, 2: { halign: 'center' } }
+            });
+
+            doc.save(`KCYM_Sales_${todayStr}.pdf`);
+        };
+
+        window.confirmResetAll = () => {
+            showConfirm("Reset All Data?", "This will wipe all counts for today.", async () => {
+                try {
+                    await runTransaction(db, async (t) => {
+                        const currentDoc = await t.get(salesRef);
+                        const newLogRef = doc(collection(db, "icecream_logs"));
+                        t.set(newLogRef, {
+                            type: 'RESET',
+                            timestamp: serverTimestamp(),
+                            backup: JSON.stringify(currentDoc.data()),
+                            day: todayStr
+                        });
+                        const resetData = { lastUpdated: serverTimestamp(), totalItems: 0, totalRevenue: 0 };
+                        ITEMS_CONFIG.forEach(i => resetData[i.id] = 0);
+                        t.update(salesRef, resetData);
+                    });
+                    showModal("Reset Complete", "All counts are zero.", "success");
+                } catch (e) {
+                    showModal("Error", e.message, "error");
+                }
+            });
+        };
+
+        window.restoreLastReset = async () => {
+             try {
+                const q = query(logsRef, orderBy('timestamp', 'desc'), limit(50));
+                const snaps = await getDocs(q);
+                const resetLog = snaps.docs.find(d => d.data().type === 'RESET');
+
+                if(!resetLog) {
+                    showModal("Failed", "No backup found.", "error");
+                    return;
+                }
+
+                showConfirm("Restore Backup?", "Revert to pre-reset state?", async () => {
+                    const data = JSON.parse(resetLog.data().backup);
+                    data.lastUpdated = serverTimestamp();
+                    await runTransaction(db, async(t) => {
+                        t.set(salesRef, data);
+                        t.delete(resetLog.ref);
+                    });
+                    showModal("Restored", "Data restored.", "success");
+                });
+             } catch(e) { showModal("Error", e.message, "error"); }
+        };
+
+        // --- NAVIGATION ---
+        if(new URLSearchParams(window.location.search).get('admin') === '1') {
+            openPinModal();
+        }
+        window.openPinModal = () => {
+            document.getElementById('pin-modal').classList.remove('hidden');
+            document.getElementById('pin-modal').classList.add('flex');
+            document.getElementById('pin-input').focus();
+        };
+        window.closePinModal = () => {
+            document.getElementById('pin-modal').classList.add('hidden');
+            document.getElementById('pin-modal').classList.remove('flex');
+        };
+        window.verifyPin = () => {
+            if(document.getElementById('pin-input').value === 'kcym2026') {
+                document.getElementById('main-view').classList.add('hidden');
+                document.getElementById('admin-view').classList.remove('hidden');
+                closePinModal();
+            } else {
+                document.getElementById('pin-input').classList.add('ring-4', 'ring-red-100', 'text-red-500');
+                setTimeout(() => document.getElementById('pin-input').classList.remove('ring-4', 'ring-red-100', 'text-red-500'), 500);
+            }
+        };
+        window.exitAdmin = () => {
+            document.getElementById('admin-view').classList.add('hidden');
+            document.getElementById('main-view').classList.remove('hidden');
+        };
+        window.showModal = (title, msg, type = 'info') => {
+            const el = document.getElementById('custom-modal');
+            const icon = document.getElementById('modal-icon');
+            const actions = document.getElementById('modal-actions');
+            
+            icon.innerHTML = type === 'success' ? '<i class="fas fa-check-circle text-green-500"></i>' : (type === 'error' ? '<i class="fas fa-times-circle text-red-500"></i>' : '<i class="fas fa-info-circle text-gray-400"></i>');
+            document.getElementById('modal-title').innerText = title;
+            document.getElementById('modal-message').innerText = msg;
+            actions.innerHTML = `<button onclick="hideModal()" class="w-full bg-gray-900 text-white py-3 rounded-2xl font-bold">Okay</button>`;
+            el.classList.remove('hidden');
+        };
+        window.showConfirm = (title, msg, callback) => {
+            const el = document.getElementById('custom-modal');
+            document.getElementById('modal-icon').innerHTML = '<i class="fas fa-question-circle text-blue-400"></i>';
+            document.getElementById('modal-title').innerText = title;
+            document.getElementById('modal-message').innerText = msg;
+            const actions = document.getElementById('modal-actions');
+            actions.innerHTML = `
+                <button onclick="hideModal()" class="flex-1 bg-gray-100 text-gray-500 py-3 rounded-2xl font-bold">Cancel</button>
+                <button id="confirm-btn" class="flex-1 bg-gray-900 text-white py-3 rounded-2xl font-bold">Confirm</button>
+            `;
+            document.getElementById('confirm-btn').onclick = () => { callback(); hideModal(); };
+            el.classList.remove('hidden');
+        };
+        window.hideModal = () => document.getElementById('custom-modal').classList.add('hidden');
+
+        initUI();
+    </script>
+</body>
+</html>
